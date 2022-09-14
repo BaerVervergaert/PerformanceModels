@@ -132,24 +132,24 @@ df = pd.DataFrame(
 	)
 
 
-function_dict = {
+function_dict1 = {
 	'a': lambda df: df['b']*df['c'],
 	'b': lambda df: df['a']/df['c'],
 	'c': lambda df: df['a']/df['b'],
 }
 
-function_dict = {
+function_dict2 = {
 	'd': lambda df: df['b']*df['c'],
 	'b': lambda df: df['d']/df['c'],
 	'c': lambda df: df['d']/df['b'],
 }
 
-pfr1 = FunctionRelation(function_dict)
-pfr2 = FunctionRelation(function_dict)
+pfr1 = FunctionRelation(function_dict1)
+pfr2 = FunctionRelation(function_dict2)
 
 fs = FunctionSystem([pfr1,pfr2])
 out = fs(df)
-
+print(out)
 
 
 
