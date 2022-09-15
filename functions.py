@@ -1,9 +1,29 @@
 import pandas as pd
 from itertools import product
 from functools import reduce
-import time
 
 
+class Calculation:
+    def __init__(self,col_name,col_df,history,prev_function_relation):
+        self.history = history
+        self.col_name = col_name
+        self.col_df = col_df
+        self.prev_function_relation = prev_function_relation
+        self.process()
+    def symbolic_representation(self):
+        return((self.col_name,self.prev_function_relation,self.history))
+    def process(self):
+        self.get_consumed_function_relations()
+    def get_consumed_function_relations(self):
+        try:
+            out = self.historic_function_relations
+        except AttributeError:
+            consumed_function_relations = {self.prev_function_relation}
+            for calc in self.history:
+                consumed_function_relations.add(calc.historic_function_relation)
+            self.historic_function_relations = consumed_function_relations
+            out = self.historic_function_relations
+        return(out)
 
 
 class PartialFunctionRelation:
@@ -52,49 +72,10 @@ class PartialFunctionRelation:
         return input_variables
 
 
-
 class FunctionRelation(PartialFunctionRelation):
     def __init__(self,function_dict):
         super(FunctionRelation,self).__init__(function_dict,function_dict.keys())
 
-
-'''
-class FunctionRelation:
-    def __init__(self,function_dict):
-        self.function_dict = function_dict
-    def __call__(self,df):
-        unknown_variables = self.get_unknown_variables(df.columns)
-        if len(unknown_variables) == 1:
-            output_variable = unknown_variables[0]
-            output = self.compute_variable(df,output_variable)
-            output.rename(output_variable,inplace=True)
-            return(output)
-        elif len(unknown_variables) == 0:
-            output = {}
-            for output_variable in self.get_output_variables():
-                output[output_variable] = self.compute_variable(df,output_variable)
-            return(output)
-        else:
-            msg = f'Cannot perform calculation with more than one missing variable: {unknown_variables}'
-            raise ValueError(msg)
-    def compute_variable(self,df,output_variable):
-        input_variables = self.get_input_variables(output_variable)
-        output = self.function_dict[output_variable](df[input_variables])
-        return(output)
-    def get_input_variables(self,output_variable):
-        input_variables = [ variable for variable in self.get_all_variables() if variable != output_variable ]
-        return input_variables
-    def get_all_variables(self):
-        return(self.function_dict.keys())
-    def get_output_variables(self):
-        return(self.function_dict.keys())
-    def get_unknown_variables(self,variable_list):
-        unknown_variables = [ variable for variable in self.get_output_variables() if variable not in variable_list ]
-        return(unknown_variables)
-    def calculable(self,variable_list):
-        unknown_variables = self.get_unknown_variables(variable_list)
-        return(len(unknown_variables) <= 1)
-'''
 
 class FunctionSystem:
     def __init__(self,function_relations):
