@@ -4,26 +4,161 @@ from functools import reduce
 
 
 class Calculation:
-    def __init__(self,col_name,col_df,history,prev_function_relation):
-        self.history = history
+    def __init__(self, col_name, col_df, function_relation=None, history=None):
+        r'''
+        Calculation is a class that supports storing calculation details such as variable name, input data,
+        source function, calculation history and previously used function relations.
+
+        :param col_name: variable name of the calculation result.
+        :param col_df: pandas Series or DataFrame of the calculation result.
+        :param function_relation: PartialFunctionRelation used to perform the calculation.
+        :param history: record of the previous calculation results used to perform the calculation.
+        '''
+        if history is None:
+            self.history = set()
+        else:
+            self.history = history
         self.col_name = col_name
         self.col_df = col_df
-        self.prev_function_relation = prev_function_relation
+        self.function_relation = function_relation
         self.process()
+
+    def __str__(self):
+        r'''
+        Returns a human-readable format of the calculation.
+
+        :return:
+        '''
+        out = tuple( str(symb_part) for symb_part in self.symbolic_representation() )
+        out = str(out)
+        return(out)
+
     def symbolic_representation(self):
-        return((self.col_name,self.prev_function_relation,self.history))
+        r'''
+        Generates the symbolic representation of the calculation.
+
+        :return:
+        '''
+        return((self.col_name, self.function_relation, self.history))
+
     def process(self):
+        r'''
+        Processes the input information after initialization.
+
+        :return:
+        '''
         self.get_consumed_function_relations()
+
     def get_consumed_function_relations(self):
+        r'''
+        Collects the consumed function relations in the calculation history for quick reference.
+
+        :return:
+        '''
         try:
             out = self.historic_function_relations
         except AttributeError:
-            consumed_function_relations = {self.prev_function_relation}
+            consumed_function_relations = set()
+            if self.function_relation is not None:
+                consumed_function_relations.add(self.function_relation)
             for calc in self.history:
                 consumed_function_relations.add(calc.historic_function_relation)
             self.historic_function_relations = consumed_function_relations
             out = self.historic_function_relations
         return(out)
+
+
+class PartialFunctionRelation:
+    def __init__(self,function_dict,all_variables):
+        r'''
+        PartialFunctionRelation is a class which supports automated calculation of function relations. To define a
+        partial function relation all the desired functions with their outcome variable should be provided in the
+        function_dict.
+
+        :param function_dict: Dictionary with output variable names as keys and functions taking in pandas DataFrames as
+        values.
+        :param all_variables: Set of variable names
+        '''
+        self.function_dict = function_dict
+        self.all_variables = set(all_variables)
+    def __call__(self,df):
+        r'''
+        Computes the results from the function relation.
+
+        If all variables are given in the input dataframe columns, then all given outcome variables are
+        calculated from the provided data.
+
+        If one variable is missing, then it will be calculated if a function is provided in function_dict. Else, an
+        error will be raised.
+
+        :param df: pandas.DataFrame containing all input variables as columns.
+        :return:
+        '''
+        unknown_variables = self.get_unknown_variables(df.columns)
+        if len(unknown_variables) == 1:
+            output_variable = unknown_variables.pop()
+            output = self.compute_variable(df,output_variable)
+            output.rename(output_variable,inplace=True)
+            return(output)
+        elif len(unknown_variables) == 0:
+            output = {}
+            for output_variable in self.get_output_variables():
+                output[output_variable] = self.compute_variable(df,output_variable)
+            return(output)
+        else:
+            msg = f'Cannot perform calculation with more than one missing variable: {unknown_variables}'
+            raise ValueError(msg)
+    def compute_variable(self,df,output_variable):
+        r'''
+        Calculate the output_variable from the input df using this function relation.
+
+        :param df:
+        :param output_variable:
+        :return:
+        '''
+        input_variables = [ variable for variable in self.get_all_variables() if variable != output_variable ]
+        output = self.function_dict[output_variable](df[input_variables])
+        return(output)
+    def get_all_variables(self):
+        r'''
+        Returns all variables in the function relation.
+
+        :return:
+        '''
+        return(self.all_variables)
+    def get_input_dimension(self):
+        r'''
+        Returns the number of required inputs.
+
+        :return:
+        '''
+        return(len(self.get_all_variables())-1)
+    def get_output_variables(self):
+        r'''
+        Returns all possible output variables of the function relation.
+
+        :return:
+        '''
+        return(self.function_dict.keys())
+    def _columns_can_calculate_column(self,col,cols):
+        not_a_member = ( col not in cols )
+        all_variables_except_output = self.get_all_variables().copy()
+        all_variables_except_output.remove(col)
+        can_calculate_col = ( set(cols) == set(all_variables_except_output) )
+        return(not_a_member and can_calculate_col)
+    def get_unknown_variables(self,variable_list):
+        unknown_variables = set( variable for variable in self.get_output_variables() if self._columns_can_calculate_column(variable,variable_list) )
+        return(unknown_variables)
+    def calculable(self,variable_list):
+        unknown_variables = self.get_unknown_variables(variable_list)
+        return(len(unknown_variables) <= 1)
+    def get_input_variables(self,output_variable):
+        input_variables = set( variable for variable in self.get_all_variables() if variable != output_variable )
+        return input_variables
+
+
+
+
 
 
 class PartialFunctionRelation:
