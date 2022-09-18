@@ -6,7 +6,7 @@ from functools import reduce
 class HypotheticalCalculation:
     def __init__(self,col_name,function_relation=None, symbolic_history=None):
         if symbolic_history is None:
-            self.symbolic_history = set()
+            self.symbolic_history = frozenset()
         else:
             self.symbolic_history = symbolic_history
         self.col_name = col_name
@@ -42,7 +42,7 @@ class Calculation:
         :param history: record of the previous calculation results used to perform the calculation.
         '''
         if history is None:
-            self.history = set()
+            self.history = frozenset()
         else:
             self.history = history
         self.col_name = col_name
@@ -90,8 +90,8 @@ class Calculation:
             if self.function_relation is not None:
                 consumed_function_relations.add(self.function_relation)
             for calc in self.history:
-                consumed_function_relations.union(calc.historic_function_relation)
-            self.historic_function_relations = consumed_function_relations
+                consumed_function_relations.update(calc.historic_function_relations)
+            self.historic_function_relations = frozenset(consumed_function_relations)
             out = self.historic_function_relations
         return(out)
     def get_symbolic_history(self):
@@ -106,7 +106,7 @@ class Calculation:
             symbolic_history = set()
             for historic_calculation in self.history:
                 symbolic_history.add(historic_calculation.symbolic_representation())
-            self.symbolic_history = symbolic_history
+            self.symbolic_history = frozenset(symbolic_history)
             out = self.symbolic_history
         return(out)
 
@@ -123,7 +123,7 @@ class PartialFunctionRelation:
         :param all_variables: Set of variable names
         '''
         self.function_dict = function_dict
-        self.all_variables = set(all_variables)
+        self.all_variables = frozenset(all_variables)
     def __call__(self,df):
         r'''
         Computes the results from the function relation.
@@ -138,15 +138,12 @@ class PartialFunctionRelation:
         :return:
         '''
         unknown_variables = self.get_unknown_variables(df.columns)
-        if len(unknown_variables) == 1:
-            output_variable = unknown_variables.pop()
-            output = self.compute_variable(df,output_variable)
-            output.rename(output_variable,inplace=True)
-            return(output)
-        elif len(unknown_variables) == 0:
-            output = {}
-            for output_variable in self.get_output_variables():
-                output[output_variable] = self.compute_variable(df,output_variable)
+        output = {}
+        for output_variable in self.get_unknown_variables(df.columns):
+            output[output_variable] = self.compute_variable(df,output_variable)
+        if len(unknown_variables)==1:
+            return(output[output_variable])
+        elif len(unknown_variables)>1:
             return(output)
         else:
             msg = f'Cannot perform calculation with more than one missing variable: {unknown_variables}'
@@ -159,8 +156,9 @@ class PartialFunctionRelation:
         :param output_variable:
         :return:
         '''
-        input_variables = [ variable for variable in self.get_all_variables() if variable != output_variable ]
+        input_variables = list(self.get_input_variables(output_variable))
         output = self.function_dict[output_variable](df[input_variables])
+        output.rename(output_variable, inplace=True)
         return(output)
     def get_all_variables(self):
         r'''
@@ -184,63 +182,23 @@ class PartialFunctionRelation:
         '''
         return(self.function_dict.keys())
     def _columns_can_calculate_column(self,col,cols):
-        not_a_member = ( col not in cols )
-        all_variables_except_output = self.get_all_variables().copy()
-        all_variables_except_output.remove(col)
-        can_calculate_col = ( set(cols) == set(all_variables_except_output) )
-        return(not_a_member and can_calculate_col)
+        r'''
+        Determine if col can be computed if cols are provided. Moreover, col is not allowed to be present in cols.
+
+        :param col: The name of the output variable.
+        :param cols: The names of the input variables.
+        :return:
+        '''
+        #not_a_member = ( col not in cols )
+        all_variables_except_output = self.get_input_variables(col)
+        can_calculate_col = set(cols).issuperset(all_variables_except_output)
+        return(can_calculate_col)#(not_a_member and can_calculate_col)
     def get_unknown_variables(self,variable_list):
         unknown_variables = set( variable for variable in self.get_output_variables() if self._columns_can_calculate_column(variable,variable_list) )
         return(unknown_variables)
     def calculable(self,variable_list):
-        unknown_variables = self.get_unknown_variables(variable_list)
-        return(len(unknown_variables) <= 1)
-    def get_input_variables(self,output_variable):
-        input_variables = set( variable for variable in self.get_all_variables() if variable != output_variable )
-        return input_variables
-
-
-class PartialFunctionRelation:
-    def __init__(self,function_dict,all_variables):
-        self.function_dict = function_dict
-        self.all_variables = set(all_variables)
-    def __call__(self,df):
-        unknown_variables = self.get_unknown_variables(df.columns)
-        if len(unknown_variables) == 1:
-            output_variable = unknown_variables.pop()
-            output = self.compute_variable(df,output_variable)
-            output.rename(output_variable,inplace=True)
-            return(output)
-        elif len(unknown_variables) == 0:
-            output = {}
-            for output_variable in self.get_output_variables():
-                output[output_variable] = self.compute_variable(df,output_variable)
-            return(output)
-        else:
-            msg = f'Cannot perform calculation with more than one missing variable: {unknown_variables}'
-            raise ValueError(msg)
-    def compute_variable(self,df,output_variable):
-        input_variables = [ variable for variable in self.get_all_variables() if variable != output_variable ]
-        output = self.function_dict[output_variable](df[input_variables])
-        return(output)
-    def get_all_variables(self):
-        return(self.all_variables)
-    def get_input_dimension(self):
-        return(len(self.get_all_variables()))
-    def get_output_variables(self):
-        return(self.function_dict.keys())
-    def _columns_can_calculate_column(self,col,cols):
-        not_a_member = ( col not in cols )
-        all_variables_except_output = self.get_all_variables().copy()
-        all_variables_except_output.remove(col)
-        can_calculate_col = ( set(cols) == set(all_variables_except_output) )
-        return(not_a_member and can_calculate_col)
-    def get_unknown_variables(self,variable_list):
-        unknown_variables = set( variable for variable in self.get_output_variables() if self._columns_can_calculate_column(variable,variable_list) )
-        return(unknown_variables)
-    def calculable(self,variable_list):
-        unknown_variables = self.get_unknown_variables(variable_list)
-        return(len(unknown_variables) <= 1)
+        out = any([ True for variable in self.get_output_variables() if self._columns_can_calculate_column(variable,variable_list) ])
+        return(out)
     def get_input_variables(self,output_variable):
         input_variables = set( variable for variable in self.get_all_variables() if variable != output_variable )
         return input_variables
@@ -256,7 +214,7 @@ class FunctionSystem:
         self.function_relations = function_relations
     def __call__(self,df):
         # Create a list of performed calculations
-        calculations = [ (col,set(),df[col]) for col in df.columns ]
+        calculations = [ (col,frozenset(),df[col]) for col in df.columns ]
         calculations = [ Calculation(col,df[col]) for col in df.columns ]
 
         # Set a boolean to keep track of continuing calculations
@@ -286,13 +244,13 @@ class FunctionSystem:
                         input_combination = list(input_combination)
 
                         # Check if proposed calculation is desirable
-                        hypothetical_history = set( calc.symbolic_history for calc in input_combination )
+                        hypothetical_history = frozenset( calc.symbolic_representation() for calc in input_combination )
                         hypothetical_calculation = HypotheticalCalculation(output_variable,function_relation=func_rel,symbolic_history=hypothetical_history)
 
                         if not self._compare_hypothetical_calculation(hypothetical_calculation,calculations):
                             input_df = pd.concat([ calc.col_df for calc in input_combination ],axis=1)
                             output = func_rel(input_df)
-                            new_calc = Calculation(output_variable,output,function_relation=func_rel,history=set(input_combination))
+                            new_calc = Calculation(output_variable,output,function_relation=func_rel,history=frozenset(input_combination))
                             calculations.append(new_calc)
                             performed_new_calculations = True
         return(calculations)
@@ -318,7 +276,7 @@ class FunctionSystem:
         compare_list = [ hypothetical_calculation.symbolic_representation() == calc.symbolic_representation() for calc in calculations ]
         return(any(compare_list))
     def _compare_function_relation_sets(self,fr_lists):
-        all_function_relations = reduce(lambda x,y: x|y, [ fr_list for fr_list in fr_lists], set())
+        all_function_relations = reduce(lambda x,y: x|y, [ fr_list for fr_list in fr_lists], frozenset())
         for fr in all_function_relations:
             if len([ None for fr_list in fr_lists if fr in fr_list ]) > 1:
                 return(False)
