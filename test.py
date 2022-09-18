@@ -149,7 +149,9 @@ pfr2 = FunctionRelation(function_dict2)
 
 fs = FunctionSystem([pfr1,pfr2])
 out = fs(df)
-print(out)
+for calc in out:
+	print(calc)
+print(len(out))
 
 
 
