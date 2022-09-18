@@ -3,6 +3,33 @@ from itertools import product
 from functools import reduce
 
 
+class HypotheticalCalculation:
+    def __init__(self,col_name,function_relation=None, symbolic_history=None):
+        if symbolic_history is None:
+            self.symbolic_history = set()
+        else:
+            self.symbolic_history = symbolic_history
+        self.col_name = col_name
+        self.function_relation = function_relation
+    def __str__(self):
+        r'''
+        Returns a human-readable format of the calculation.
+
+        :return:
+        '''
+        out = tuple( str(symb_part) for symb_part in self.symbolic_representation() )
+        out = str(out)
+        return(out)
+
+    def symbolic_representation(self):
+        r'''
+        Generates the symbolic representation of the calculation.
+
+        :return:
+        '''
+        return((self.col_name, self.function_relation, self.symbolic_history))
+
+
 class Calculation:
     def __init__(self, col_name, col_df, function_relation=None, history=None):
         r'''
@@ -39,7 +66,7 @@ class Calculation:
 
         :return:
         '''
-        return((self.col_name, self.function_relation, self.history))
+        return((self.col_name, self.function_relation, self.symbolic_history))
 
     def process(self):
         r'''
@@ -48,6 +75,7 @@ class Calculation:
         :return:
         '''
         self.get_consumed_function_relations()
+        self.get_symbolic_history()
 
     def get_consumed_function_relations(self):
         r'''
@@ -62,9 +90,24 @@ class Calculation:
             if self.function_relation is not None:
                 consumed_function_relations.add(self.function_relation)
             for calc in self.history:
-                consumed_function_relations.add(calc.historic_function_relation)
+                consumed_function_relations.union(calc.historic_function_relation)
             self.historic_function_relations = consumed_function_relations
             out = self.historic_function_relations
+        return(out)
+    def get_symbolic_history(self):
+        r'''
+        Collects the symbolic history of the calculation.
+
+        :return:
+        '''
+        try:
+            out = self.symbolic_history
+        except AttributeError:
+            symbolic_history = set()
+            for historic_calculation in self.history:
+                symbolic_history.add(historic_calculation.symbolic_representation())
+            self.symbolic_history = symbolic_history
+            out = self.symbolic_history
         return(out)
 
 
@@ -157,10 +200,6 @@ class PartialFunctionRelation:
         return input_variables
 
 
-
-
-
-
 class PartialFunctionRelation:
     def __init__(self,function_dict,all_variables):
         self.function_dict = function_dict
@@ -218,6 +257,7 @@ class FunctionSystem:
     def __call__(self,df):
         # Create a list of performed calculations
         calculations = [ (col,set(),df[col]) for col in df.columns ]
+        calculations = [ Calculation(col,df[col]) for col in df.columns ]
 
         # Set a boolean to keep track of continuing calculations
         performed_new_calculations = True
@@ -230,27 +270,30 @@ class FunctionSystem:
 
                 # Find calculated columns we can use with the function relation
                 # candidate_columns = [ col for (col,fr_list,col_df) in calculations if func_rel not in fr_list ]
-                candidate_input = [ (col,fr_list,col_df) for (col,fr_list,col_df) in calculations if func_rel not in fr_list ]
-                candidate_columns = [ col for (col,fr_list,col_df) in candidate_input ]
+                # candidate_input = [ (col,fr_list,col_df) for (col,fr_list,col_df) in calculations if func_rel not in fr_list ]
+                candidate_input = [
+                    calc for calc in calculations
+                    if (func_rel not in calc.historic_function_relations)
+                       and (calc.col_name in func_rel.get_all_variables())
+                ]
+                candidate_columns = [ calc.col_name for calc in candidate_input ]
 
                 # Check if the function_relation can use the columns to compute any output
                 if func_rel.calculable(candidate_columns):
 
-                    # Gather optional input columns
-                    options = [ (col,fr_list,col_df) for (col,fr_list,col_df) in candidate_input if (col in func_rel.get_all_variables()) ]
-
                     # Loop over all valid input combinations
-                    for (output_variable, input_combination) in self._possible_input_sets(func_rel,options):
+                    for (output_variable, input_combination) in self._possible_input_sets(func_rel,candidate_input):
+                        input_combination = list(input_combination)
 
                         # Check if proposed calculation is desirable
-                        fr_list = reduce(lambda x,y: x|y, [ fr_list for (col,fr_list,col_df) in input_combination ], set())
-                        fr_list.add(func_rel)
-                        hypothetical_calculation = (output_variable,fr_list)
+                        hypothetical_history = set( calc.symbolic_history for calc in input_combination )
+                        hypothetical_calculation = HypotheticalCalculation(output_variable,function_relation=func_rel,symbolic_history=hypothetical_history)
 
                         if not self._compare_hypothetical_calculation(hypothetical_calculation,calculations):
-                            input_df = pd.concat([ col_df for (col,fr_list,col_df) in input_combination ],axis=1)
+                            input_df = pd.concat([ calc.col_df for calc in input_combination ],axis=1)
                             output = func_rel(input_df)
-                            calculations.append((output_variable,fr_list,output))
+                            new_calc = Calculation(output_variable,output,function_relation=func_rel,history=set(input_combination))
+                            calculations.append(new_calc)
                             performed_new_calculations = True
         return(calculations)
     def _possible_input_sets(self,func_rel,options):
@@ -261,18 +304,18 @@ class FunctionSystem:
             input_variables = func_rel.get_input_variables(output_variable)
 
             # Construct input_variable options per dimension
-            input_combinations = [ [ (col,fr_list,col_df) for (col,fr_list,col_df) in options if input_variable == col ] for input_variable in input_variables ]
+            input_combinations = [ [ calc for calc in options if input_variable == calc.col_name ] for input_variable in input_variables ]
 
             # Per input_combination yield output_variable with input_combination
             for input_combination in product(*input_combinations):
 
                 # Only yield if input_combination is a valid pairing of input dimensions
-                if self._compare_function_relation_sets([fr_list for (col,fr_list,col_df) in input_combination ]):
+                if self._compare_function_relation_sets([calc.historic_function_relations for calc in input_combination ]):
 
                     # Yield output_variable with input_combination
                     yield(output_variable,input_combination)
     def _compare_hypothetical_calculation(self,hypothetical_calculation,calculations):
-        compare_list = [ hypothetical_calculation == (col,fr_list) for (col,fr_list,col_df) in calculations ]
+        compare_list = [ hypothetical_calculation.symbolic_representation() == calc.symbolic_representation() for calc in calculations ]
         return(any(compare_list))
     def _compare_function_relation_sets(self,fr_lists):
         all_function_relations = reduce(lambda x,y: x|y, [ fr_list for fr_list in fr_lists], set())
