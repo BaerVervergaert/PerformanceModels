@@ -84,14 +84,32 @@ class PartialFunctionRelation:
         #not_a_member = ( col not in cols )
         all_variables_except_output = self.get_input_variables(col)
         can_calculate_col = set(cols).issuperset(all_variables_except_output)
-        return(can_calculate_col)#(not_a_member and can_calculate_col)
+        return(can_calculate_col)
     def get_unknown_variables(self,variable_list):
+        r'''
+        Returns the set of variables which can be calculated from given variables.
+
+        :param variable_list: Iterable of variable names which symbolize the input.
+        :return: Set of unknown variables which can be ccomputed from variable_list.
+        '''
         unknown_variables = set( variable for variable in self.get_output_variables() if self._columns_can_calculate_column(variable,variable_list) )
         return(unknown_variables)
     def calculable(self,variable_list):
+        r'''
+        Determines if variable_list can use this function relation to calculation any unknown variable.
+
+        :param variable_list: Iterable of variable names.
+        :return:
+        '''
         out = any([ True for variable in self.get_output_variables() if self._columns_can_calculate_column(variable,variable_list) ])
         return(out)
     def get_input_variables(self,output_variable):
+        r'''
+        Determine the necessary input variables from a given output variable.
+
+        :param output_variable: variable name.
+        :return:
+        '''
         input_variables = set( variable for variable in self.get_all_variables() if variable != output_variable )
         return input_variables
 
@@ -100,13 +118,21 @@ class FunctionRelation(PartialFunctionRelation):
     def __init__(self,function_dict):
         super(FunctionRelation,self).__init__(function_dict,function_dict.keys())
 
-class SymbolicFunctionRelation:
-    def __init__(self,function_relation,all_variables,constants=None):
+class SymbolicFunctionRelation(PartialFunctionRelation):
+    def __init__(self,function_relation,variables,constants=None):
+        r'''
+        A user-friendly helper class to construct a function relation from a string formatted relation.
+
+        :param function_relation: Str formatted function relation.
+        :param all_variables: List-like of variables used in the function relation.
+        :param constants: Dict-like of (constant_name,constant_value) pairs of constants used in the fucntion relation.
+        '''
         if constants is None:
             constants = dict()
         self.function_relation = function_relation
-        self.variables = frozenset(all_variables)
+        self.variables = frozenset(variables)
         self.constants = constants
+        self.to_function_relation()
     def __str__(self):
         str_rep = f'SymbolicFunctionRelation: {self.function_relation}'
         return(str_rep)
@@ -153,6 +179,5 @@ class SymbolicFunctionRelation:
                 traceback.print_exception(nie)
                 warnings.warn(f'Skipping variable {variable} because it is not uniquely invertible for sympy.')
         variables = frozenset( str(v) for v in variables )
-        func_rel = PartialFunctionRelation(func_dict,variables)
-        return(func_rel)
+        super(SymbolicFunctionRelation,self).__init__(func_dict,variables)
 
