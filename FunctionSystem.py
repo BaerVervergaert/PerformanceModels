@@ -101,3 +101,4 @@ class SymbolicFunctionSystem:
         self.transform_symbolic_function_relations()
         fs = FunctionSystem(self.function_relations)
         return(fs)
+

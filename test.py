@@ -1,9 +1,7 @@
-import pandas as pd
 import numpy as np
-from functions import *
 
-
-
+from FunctionRelations import PartialFunctionRelation, FunctionRelation, SymbolicFunctionRelation
+from FunctionSystem import FunctionSystem, SymbolicFunctionSystem
 
 #%% PARTIAL FUNCTION TEST - ALL INPUT
 
@@ -153,9 +151,43 @@ for calc in out:
 	print(calc)
 print(len(out))
 
+import numpy as np
+constants = {
+	'a':2,
+}
+function_relations = [
+	'c=a*b',
+	'd=b*c'
+	]
+variables = ['b','c','d']
+sfs = SymbolicFunctionSystem(function_relations,variables,constants=constants)
+print(sfs)
+sfs.transform_symbolic_function_relations()
+fs = sfs.to_function_system()
+df = pd.DataFrame(data=np.random.random(size=(10,len(variables))),columns=variables)
+for calc in fs(df):
+	print(calc)
+	print(calc.col_df)
 
+import pandas as pd
+import numpy as np
 
+function_relation = 'aaa=a*aa'
+variables = ['a','aa','aaa']
+sfr = SymbolicFunctionRelation(function_relation,variables)
+sfr.transform_variables_to_sympy()
+sfr.transform_formula_to_sympy()
+fr = sfr.to_function_relation()
 
+df = pd.DataFrame(data = np.random.random(size=(10,3)),columns=variables)
+print(df)
+test_c = fr(df.loc[:,variables[:-1]])
+print(test_c)
+a = df['a']
+aa = df['aa']
+exec(function_relation)
+print(aaa)
+print((test_c == aaa).all())
 
 
 

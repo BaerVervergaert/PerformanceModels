@@ -155,3 +155,4 @@ class SymbolicFunctionRelation:
         variables = frozenset( str(v) for v in variables )
         func_rel = PartialFunctionRelation(func_dict,variables)
         return(func_rel)
+
