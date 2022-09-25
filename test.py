@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 from FunctionRelations import PartialFunctionRelation, FunctionRelation, SymbolicFunctionRelation
 from FunctionSystem import FunctionSystem, SymbolicFunctionSystem
